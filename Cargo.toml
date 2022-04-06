@@ -1,0 +1,20 @@
+[package]
+name = "wordle"
+version = "1.0.0"
+authors = ["Samuel Corsi-House <chouse.samuel@gmail.com>"]
+edition = "2021"
+
+[profile.release]
+opt-level = "s"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+console_error_panic_hook = "0.1.6"
+wasm-bindgen = "0.2.63"
+
+[target.'cfg(unix)'.dependencies]
+crossterm = "0.23.2"
+dialoguer = "0.10.0"
+paris = { version = "1.5.11", features = ["macros", "no_logger"] }

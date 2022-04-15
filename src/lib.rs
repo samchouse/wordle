@@ -4,7 +4,32 @@ use wasm_bindgen::prelude::*;
 
 static WORDS: &str = include_str!("resources/words.txt");
 
-trait Game {
+enum SchemaValueState {
+    Unknown,
+    Contains,
+    Exact,
+}
+
+impl SchemaValueState {
+    fn from_u8(value: u8) -> SchemaValueState {
+        match value {
+            0 => SchemaValueState::Unknown,
+            1 => SchemaValueState::Contains,
+            2 => SchemaValueState::Exact,
+            _ => SchemaValueState::Unknown,
+        }
+    }
+}
+
+struct SchemaValue {
+    index: usize,
+    state: SchemaValueState,
+    letters: String,
+}
+
+trait Wordle {
+    fn to_schema_value(&self, index: usize) -> SchemaValue;
+    fn to_schema(&self) -> Vec<SchemaValue>;
     fn can_be_wordle(
         &self,
         confirmed: &str,
@@ -14,7 +39,36 @@ trait Game {
     ) -> bool;
 }
 
-impl Game for &str {
+impl Wordle for &str {
+    fn to_schema_value(&self, index: usize) -> SchemaValue {
+        let mut state = SchemaValueState::Unknown;
+        let mut letters = String::new();
+
+        for c in self.chars() {
+            if c.is_numeric() {
+                state = SchemaValueState::from_u8(c.to_digit(10).unwrap() as u8);
+            } else {
+                letters.push(c);
+            }
+        }
+
+        SchemaValue {
+            index,
+            state,
+            letters,
+        }
+    }
+
+    fn to_schema(&self) -> Vec<SchemaValue> {
+        let mut schema: Vec<SchemaValue> = Vec::new();
+
+        for (idx, letters) in self.split_inclusive(char::is_numeric).enumerate() {
+            schema.push(letters.to_schema_value(idx + 1));
+        }
+
+        schema
+    }
+
     fn can_be_wordle(
         &self,
         confirmed: &str,
@@ -53,7 +107,7 @@ impl Game for &str {
         let mut is_valid = [false; 5];
         for schema_value in schema.iter() {
             match schema_value.state {
-                2 => {
+                SchemaValueState::Exact => {
                     if self.chars().skip(schema_value.index - 1).next()
                         == schema_value.letters.chars().next()
                     {
@@ -61,7 +115,7 @@ impl Game for &str {
                         continue;
                     }
                 }
-                1 => {
+                SchemaValueState::Contains => {
                     for char in schema_value.letters.chars() {
                         if self.chars().skip(schema_value.index - 1).next() == Some(char) {
                             is_valid[schema_value.index - 1] = false;
@@ -73,7 +127,7 @@ impl Game for &str {
                         }
                     }
                 }
-                _ => is_valid[schema_value.index - 1] = true,
+                SchemaValueState::Unknown => is_valid[schema_value.index - 1] = true,
             }
         }
 
@@ -85,59 +139,14 @@ impl Game for &str {
     }
 }
 
-trait Schema {
-    fn schema_from_str(s: &str) -> Self;
-}
-
-impl Schema for Vec<SchemaValue> {
-    fn schema_from_str(s: &str) -> Self {
-        let mut schema: Vec<SchemaValue> = Vec::new();
-
-        for (idx, letters) in s.split_inclusive(char::is_numeric).enumerate() {
-            schema.push(SchemaValue::from_str(letters, idx + 1));
-        }
-
-        schema
-    }
-}
-
-struct SchemaValue {
-    index: usize,
-    state: u8,
-    letters: String,
-}
-
-impl SchemaValue {
-    fn from_str(s: &str, index: usize) -> Self {
-        let mut state = 0;
-        let mut letters = String::new();
-
-        for c in s.chars() {
-            if c.is_numeric() {
-                state = c.to_digit(10).unwrap() as u8;
-            } else {
-                letters.push(c);
-            }
-        }
-
-        SchemaValue {
-            index,
-            state,
-            letters,
-        }
-    }
-}
-
 #[wasm_bindgen]
 pub fn solver(confirmed: &str, extras: &str, multiples: &str, schema: &str) -> String {
     #[cfg(target_family = "wasm")]
     console_error_panic_hook::set_once();
 
-    let schema = Vec::schema_from_str(schema);
-
     let words: Vec<_> = WORDS
         .lines()
-        .filter(|line| line.can_be_wordle(&confirmed, &extras, &multiples, &schema))
+        .filter(|line| line.can_be_wordle(&confirmed, &extras, &multiples, &schema.to_schema()))
         .collect();
 
     words.join(",")

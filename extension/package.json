@@ -16,7 +16,7 @@
     "@samrum/vite-plugin-web-extension": "^0.1.1",
     "@types/webextension-polyfill": "^0.8.2",
     "typescript": "^4.5.4",
-    "vite": "~2.8.0",
+    "vite": "~2.9.13",
     "web-ext": "^6.6.0"
   },
   "dependencies": {

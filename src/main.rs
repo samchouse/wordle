@@ -1,6 +1,3 @@
-#![cfg(target_family = "unix")]
-mod lib;
-
 use std::io;
 
 use crossterm::{
@@ -20,17 +17,18 @@ fn run() -> crossterm::Result<()> {
     let confirmed_letters: String = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("Confirmed letters")
         .interact_text()?;
-    let mut extra_letters = String::new();
-    let mut schema = String::new();
+    
+    let mut left_over_letters = String::new();
     let mut multiple_letters = String::new();
+    let mut schema = String::new();
 
     if Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt("Do you want to add extra letters?")
+        .with_prompt("Do you want to add left over letters?")
         .default(false)
         .interact()?
     {
-        extra_letters = Input::with_theme(&ColorfulTheme::default())
-            .with_prompt("Extra letters")
+        left_over_letters = Input::with_theme(&ColorfulTheme::default())
+            .with_prompt("Left over letters")
             .interact_text()?;
     }
 
@@ -57,9 +55,9 @@ fn run() -> crossterm::Result<()> {
     println!();
 
     let mut found_words = false;
-    lib::solver(
+    wordle::solver(
         &confirmed_letters,
-        &extra_letters,
+        &left_over_letters,
         &multiple_letters,
         &schema,
     )

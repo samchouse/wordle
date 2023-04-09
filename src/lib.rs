@@ -1,30 +1,17 @@
-#[cfg(target_family = "wasm")]
-use console_error_panic_hook;
-use wasm_bindgen::prelude::*;
-
 static WORDS: &str = include_str!("resources/words.txt");
 
-enum SchemaValueState {
+#[derive(Debug)]
+struct SchemaValue {
+    index: usize,
+    state: SchemaState,
+    letters: String,
+}
+
+#[derive(Debug)]
+enum SchemaState {
     Unknown,
     Contains,
     Exact,
-}
-
-impl SchemaValueState {
-    fn from_u8(value: u8) -> SchemaValueState {
-        match value {
-            0 => SchemaValueState::Unknown,
-            1 => SchemaValueState::Contains,
-            2 => SchemaValueState::Exact,
-            _ => SchemaValueState::Unknown,
-        }
-    }
-}
-
-struct SchemaValue {
-    index: usize,
-    state: SchemaValueState,
-    letters: String,
 }
 
 trait Wordle {
@@ -33,23 +20,37 @@ trait Wordle {
     fn can_be_wordle(
         &self,
         confirmed: &str,
-        extras: &str,
+        left_overs: &str,
         multiples: &str,
         schema: &Vec<SchemaValue>,
     ) -> bool;
 }
 
+impl TryFrom<char> for SchemaState {
+    type Error = ();
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        match value {
+            '?' => Ok(SchemaState::Unknown),
+            '/' => Ok(SchemaState::Contains),
+            '!' => Ok(SchemaState::Exact),
+            _ => Err(()),
+        }
+    }
+}
+
 impl Wordle for &str {
     fn to_schema_value(&self, index: usize) -> SchemaValue {
-        let mut state = SchemaValueState::Unknown;
+        let mut state = SchemaState::Unknown;
         let mut letters = String::new();
 
         for c in self.chars() {
-            if c.is_numeric() {
-                state = SchemaValueState::from_u8(c.to_digit(10).unwrap() as u8);
-            } else {
-                letters.push(c);
+            if let Ok(lstate) = SchemaState::try_from(c) {
+                state = lstate;
+                continue;
             }
+
+            letters.push(c);
         }
 
         SchemaValue {
@@ -62,7 +63,10 @@ impl Wordle for &str {
     fn to_schema(&self) -> Vec<SchemaValue> {
         let mut schema: Vec<SchemaValue> = Vec::new();
 
-        for (idx, letters) in self.split_inclusive(char::is_numeric).enumerate() {
+        for (idx, letters) in self
+            .split_inclusive(|c| c == '!' || c == '/' || c == '?')
+            .enumerate()
+        {
             schema.push(letters.to_schema_value(idx + 1));
         }
 
@@ -72,7 +76,7 @@ impl Wordle for &str {
     fn can_be_wordle(
         &self,
         confirmed: &str,
-        extras: &str,
+        left_overs: &str,
         multiples: &str,
         schema: &Vec<SchemaValue>,
     ) -> bool {
@@ -93,9 +97,9 @@ impl Wordle for &str {
 
         if checked != confirmed.len() {
             return false;
-        } else if extras.len() != 0
+        } else if left_overs.len() != 0
             && !self.chars().all(|c| {
-                let all_letters = format!("{}{}", confirmed, extras);
+                let all_letters = format!("{}{}", confirmed, left_overs);
                 all_letters.contains(c)
             })
         {
@@ -107,7 +111,7 @@ impl Wordle for &str {
         let mut is_valid = [false; 5];
         for schema_value in schema.iter() {
             match schema_value.state {
-                SchemaValueState::Exact => {
+                SchemaState::Exact => {
                     if self.chars().skip(schema_value.index - 1).next()
                         == schema_value.letters.chars().next()
                     {
@@ -115,7 +119,7 @@ impl Wordle for &str {
                         continue;
                     }
                 }
-                SchemaValueState::Contains => {
+                SchemaState::Contains => {
                     for char in schema_value.letters.chars() {
                         if self.chars().skip(schema_value.index - 1).next() == Some(char) {
                             is_valid[schema_value.index - 1] = false;
@@ -127,7 +131,7 @@ impl Wordle for &str {
                         }
                     }
                 }
-                SchemaValueState::Unknown => is_valid[schema_value.index - 1] = true,
+                SchemaState::Unknown => is_valid[schema_value.index - 1] = true,
             }
         }
 
@@ -139,14 +143,11 @@ impl Wordle for &str {
     }
 }
 
-#[wasm_bindgen]
 pub fn solver(confirmed: &str, extras: &str, multiples: &str, schema: &str) -> String {
-    #[cfg(target_family = "wasm")]
-    console_error_panic_hook::set_once();
-
+    let schema = schema.to_schema();
     let words: Vec<_> = WORDS
         .lines()
-        .filter(|line| line.can_be_wordle(&confirmed, &extras, &multiples, &schema.to_schema()))
+        .filter(|word| word.can_be_wordle(&confirmed, &extras, &multiples, &schema))
         .collect();
 
     words.join(",")
